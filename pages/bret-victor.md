@@ -15,11 +15,11 @@ The point of listing those here is not just to mirror what's on Bret's site, but
 
 ## On the podcast
 
-[26: Glen Chiacchieri](https://futureofcoding.org/episodes/026)
+[26: Glen Chiacchieri](https://feelingof.com/episodes/026)
 
-[60: Magic Ink](https://futureofcoding.org/episodes/060)
+[60: Magic Ink](https://feelingof.com/episodes/060)
 
-[71: Elephant in the room](https://futureofcoding.org/episodes/071)
+[71: Elephant in the room](https://feelingof.com/episodes/071)
 
 ## Threads from our archives with interesting comments or call-outs
 

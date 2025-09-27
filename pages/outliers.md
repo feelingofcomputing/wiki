@@ -21,7 +21,7 @@ Some of these (particularly early) threads are chopped up across multiple thread
 [2024-07](https://akkartik.name/archives/foc/administrivia/1722031490.277229.html): Moving away from Slack by building a new forum for ourselves. (18 commenters)
 [2020-09](https://akkartik.name/archives/foc/thinking-together/1599588394.135900.html):  Is there any hope for end-user programming when programmers themselves don't use programming to solve their own problems? (18 commenters; 153 comments)
 [2019-03](https://akkartik.name/archives/foc/share-your-work/1553340554.128300.html): Simplifying version control (18 commenters)
-[2020-11](https://akkartik.name/archives/foc/thinking-together/1605529303.475100.html): Future of Coding vs Handmade Network; what we can learn from each other, opportunities for building bridges (17 commenters)
+[2020-11](https://akkartik.name/archives/foc/thinking-together/1605529303.475100.html): Feeling of Computing vs Handmade Network; what we can learn from each other, opportunities for building bridges (17 commenters)
 [2020-08](https://akkartik.name/archives/foc/thinking-together/1598534303.161500.html): Is data-phobia a real thing? (17 commenters)
 
 ## Threads with the most comments

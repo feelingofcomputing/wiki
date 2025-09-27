@@ -3,7 +3,7 @@ title: Collaboration in the Community
 contributors: Kartik Agaram, Ivan Reese
 ---
 
-Many people who join our community are steadily working away at their own "future of coding"-esq project, and delight in finding a place to talk about their discoveries, or their frustrations. There's a sense of camaraderie — we share this desire to do new things with (or to) our computers, whether that's breaking them apart and rebuilding them, or just scratching this one pernicious itch.
+Many people who join our community are steadily working away at their own "feeling of computing"-esq project, and delight in finding a place to talk about their discoveries, or their frustrations. There's a sense of camaraderie — we share this desire to do new things with (or to) our computers, whether that's breaking them apart and rebuilding them, or just scratching this one pernicious itch.
 
 We like to encourage collaboration of all sorts among our members. That could mean joining up to work on a single codebase together, or sharing early demos and offering constructive feedback.
 
@@ -13,7 +13,7 @@ Let's collect some nice examples of the sorts of collaboration taking place.
 
 [This wiki](/), naturally, is a collaborative project run by members of the community. There are also a few other-meta projects that seek to foster collaboration.
 
-The [Project Comparison](https://docs.google.com/spreadsheets/d/12sTu7RT-s_QlAupY1v-3DfI1Mm9NEX5YMWWTDAKHLfc/edit) Google Sheet catalogs Future of Coding projects in and around the community. It's not an exhaustive listing, but it does provide an interesting starting point to see who here is working on what, plus a few projects elsewhere that might be of interest to our members. If you’re looking for a project to contribute to, this is one place to explore your options. If you are working on a project, you may edit the spreadsheet to add your project (please stick to the existing format).
+The [Project Comparison](https://docs.google.com/spreadsheets/d/12sTu7RT-s_QlAupY1v-3DfI1Mm9NEX5YMWWTDAKHLfc/edit) Google Sheet catalogs Feeling of Computing projects in and around the community. It's not an exhaustive listing, but it does provide an interesting starting point to see who here is working on what, plus a few projects elsewhere that might be of interest to our members. If you’re looking for a project to contribute to, this is one place to explore your options. If you are working on a project, you may edit the spreadsheet to add your project (please stick to the existing format).
 
 # Discussions
 

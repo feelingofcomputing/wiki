@@ -131,11 +131,11 @@ and the <a href="/contributing">contributing guide</a>
 Use an **external link** to link to another website.
 
 ```
-The [Future of Coding](futureofcoding.org) community.
+The [Feeling of Computing](feelingof.com) community.
 ```
 ↓
 ```
-The <a href="https://futureofcoding.org">Future of Coding</a> community.
+The <a href="https://feelingof.com">Feeling of Computing</a> community.
 ```
 
 ## HTML

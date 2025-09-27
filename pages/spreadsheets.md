@@ -33,7 +33,7 @@ contributors: Kartik Agaram
 
 [Userland](https://github.com/hishamhm/userland-prototype) (2019)
 
-[StreamSheets](https://futureofcoding.org/prototypes/streamsheets) (2017)
+[StreamSheets](https://feelingof.com/prototypes/streamsheets) (2017)
 
 ## Homage
 

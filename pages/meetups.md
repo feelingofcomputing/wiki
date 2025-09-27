@@ -1,13 +1,10 @@
 ---
-title: Future of Coding meetups
-contributors: Maikel
+title: Feeling of Computing meetups
+contributors: Ivan Reese, Maikel
 ---
 
-This is the schedule for our Future of Coding meetups, both online and offline.
-If you want to demo/present on one these meetups, please contact the organisers (for the online meetup's this can be done via slack).
+There are two active meetups affiliated with the Feeling of Computing community.
+If you want to demo/present on one these meetups, please contact the organizers (for the online meetups this can be done via Slack).
 
-- Wednesday 27 Nov 2024 16:00 UTC - Online meetup with 3 demo's from community members given as "chess-clock-talks"
-
-## Recurring meetups
-
-- [Future of Coding London](https://lu.ma/foclondon)
+- [Monthly Virtual Meetup](https://luma.com/feelingofcomputing) — hosted by the Slack community
+- [Future of Coding London](https://luma.com/foclondon) — hosted by some lovely folks in London, England

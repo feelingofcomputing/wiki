@@ -1,14 +1,14 @@
-# Future of Coding Wiki
+# Feeling of Computing Wiki
 
-Welcome to the Future of Coding Wiki!
+Welcome to the Feeling of Computing Wiki!
 
-We'll use this wiki to collect all sorts of references, projects, concepts, realizations, and other such bits of endearingly valuable knowledge that are surfaced by discussions in [our community](https://futureofcoding.org/community).
+We'll use this wiki to collect all sorts of references, projects, concepts, realizations, and other such bits of endearingly valuable knowledge that are surfaced by discussions in [our community](https://feelingof.com/community).
 
 ## Contributing
 
 Everyone is welcome to contribute. Please feel free to edit _anything in the repo_ at any time in any way, and then submit a PR.
 
-For more guidance, see the [Contributing](https://wiki.futureofcoding.org/contributing) page.
+For more guidance, see the [Contributing](https://wiki.feelingof.com/contributing) page.
 
 ## Build Scripts
 
