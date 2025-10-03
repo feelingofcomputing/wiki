@@ -1,4 +1,6 @@
-# Software and Politics
+---
+title: Software and Politics
+---
 
 [2019-08-28](https://akkartik.name/archives/foc/linking-together/1567003312.002200.html)
 [2020-01-03](https://akkartik.name/archives/foc/linking-together/1578046428.021300.html)
