@@ -22,6 +22,8 @@ A one-way sync that mirrors Slack messages from the FoC Slack workspace into the
    - A single `cache` table — dumb projection of atproto records from any repo, keyed by `(repo, collection, rkey)`, body stored opaquely as JSON. Wipe it and the firehose rebuilds it.
    - Separate private tables (e.g. `oauth_tokens` in v2) for credentials that can't go on atproto.
 
+The consumer writes records in a fixed order per event: **first** `slackRaw` (lossless capture of the payload as received from Slack), **then** the derived `social.colibri.message`, **then** `slackOrigin` linking the two. If derivation crashes or is later improved, the raw record is still on atproto and the Colibri view can be regenerated without re-pulling Slack. See [slackRaw](#new-comfeelingofbridgeslackraw).
+
 ### Sequence diagram
 
 ```mermaid
@@ -152,6 +154,44 @@ Cache staleness is the residual risk: an upstream edit on the PDS leaves our row
 - `createdAt` ← Slack `ts`
 - `facets` ← mentions, links (v0.1)
 - `attachments` ← deferred (Slack files need blob re-upload)
+
+### New: `com.feelingof.bridge.slackRaw`
+
+Lossless archival of the raw Slack event payload. Written **before** any derivation, so the bridge never drops information it doesn't yet know how to render — reactions, edits, attachments, blocks, mrkdwn nuances — even if the v0 Colibri-message derivation ignores most of them. The bot's atproto repo becomes a public, replicable Slack archive that anyone can re-derive a Colibri view from.
+
+`key: "any"` so the rkey matches the `slackOrigin` rkey for join-free lookup:
+
+```
+rkey = `${slackChannelId}-${slackTs.replace('.','-')}`
+```
+
+Edits and reactions update the same record (`putRecord`). v0.1 could split this into per-event-type records (`channelId-ts-eventType-seq`) if we need full event history rather than latest-known state.
+
+```json
+{
+  "lexicon": 1,
+  "id": "com.feelingof.bridge.slackRaw",
+  "defs": {
+    "main": {
+      "type": "record",
+      "key": "any",
+      "record": {
+        "type": "object",
+        "required": ["slackChannelId", "slackTs", "payload", "capturedAt"],
+        "properties": {
+          "slackChannelId": { "type": "string" },
+          "slackTs":        { "type": "string" },
+          "eventType":      { "type": "string", "description": "Slack event subtype: 'message', 'message_changed', 'message_deleted', 'reaction_added', etc." },
+          "payload":        { "type": "unknown", "description": "Raw Slack message object as received (minus auth tokens)." },
+          "capturedAt":     { "type": "string", "format": "datetime" }
+        }
+      }
+    }
+  }
+}
+```
+
+Slack file attachments referenced in `payload.files[]` are not blobbed in v0; their `url_private` is captured but the bytes stay on Slack. v0.1 fetches and re-uploads as atproto blobs, referencing them from the derived `social.colibri.message`.
 
 ### New: `com.feelingof.bridge.slackOrigin`
 
@@ -314,8 +354,8 @@ A claimed user can republish their own messages onto their own repo at any time 
 - Backfill from `dump-history.js` snapshot, or forward-only? All-channels backfill is significant volume.
 - Channel / category layout: single community with flat siblings, or map Slack groupings to Colibri categories? Sidecar is agnostic.
 - Private channels and DMs — out of scope. Bot joins public channels only.
-- Reactions, edits, deletes. v0 ignores. v0.1: edits via `putRecord` on the message.
-- Slack file attachments — deferred.
+- Reactions, edits, deletes — v0 ignores in the *rendered* Colibri message but captures everything in `slackRaw`, so v0.1 can re-derive the visible message without re-pulling Slack. Edits: `putRecord` on both `slackRaw` and the message. Deletes: tombstone the message, retain the `slackRaw` for audit.
+- Slack file attachments — `payload.files[]` is preserved in `slackRaw` (including `url_private`) from v0; v0.1 fetches and re-uploads as atproto blobs.
 - False DID claims. v1 unverified; v2 requires two-sided counter-claim.
 - OAuth re-auth UX (v2): frequency cap, fallback when user ignores the prompt.
 
@@ -323,6 +363,7 @@ A claimed user can republish their own messages onto their own repo at any time 
 
 - **[Bridgy Fed](https://fed.brid.gy)** — ActivityPub ↔ atproto. Not applicable directly (Slack isn't ActivityPub) but informs the rejected per-user ghost-DID approach and our `slackOrigin` provenance pattern.
 - **[matrix-appservice-slack](https://github.com/matrix-org/matrix-appservice-slack)** — closest sibling. Same Slack-webhook → ghost-users → federated-protocol shape, targeting Matrix.
+- **Mariano's `scripts/dump-history.js` + `foc-server`** ([repo](https://github.com/marianoguerra/Feeling-of-Computing)) — the existing FoC Slack pipeline runs in a different shape: a Node CLI that pulls `conversations.history` + `conversations.replies` via Slack's REST API on a manual / weekly cadence, writes JSON to `history/YYYY/MM/DD{,.replies}.json`, indexes it into LanceDB with sentence-transformer embeddings, and serves search via a Rust `axum` binary deployed on Ubuntu under systemd behind nginx (see `foc-server/docs/systemd.md`). Pull, not push; ingest-and-reindex, not bridge. Our `slackRaw` lexicon is the atproto-native analog of those committed `history/*.json` dumps — same archival role, public over the firehose instead of `git push`.
 
 ## Related
 
