@@ -245,7 +245,7 @@ Identity record. Rkey = sanitised Slack user ID. `claimedDid` starts unset; popu
 
 ## Identity
 
-One bot DID on `bsky.social` (e.g. `feelingof.bsky.social`). Every bridged message is authored by that DID. Attribution lives in the message text body as `**@user:** ...`.
+One bot DID on `bsky.social` (e.g. `feelingof.bsky.social`). The bot owns the Colibri community, every category in it, every channel under those categories, and every bridged message. Attribution for the original Slack speaker lives in the message text body as `@user: ...` (rendered with a mention facet once the speaker has claimed a DID).
 
 ### Authorship is immutable
 
@@ -254,6 +254,29 @@ The author of an atproto record is the DID of the repo it lives on. `putRecord` 
 - All bridged messages stay authored by the bot. Forever.
 - "Post from user's DID" (v2 below) only applies to *new* messages after claim. Hybrid history.
 - Retroactive delete + republish would change the at-uri, breaking links / threads / firehose state. Not recommended.
+
+### Channels live in the bot's community
+
+The Colibri appview hard-couples channel ownership to community ownership by author DID. From `jetstream.rs` channel handler:
+
+```rust
+let community_uri =
+    format!("at://{}/social.colibri.community/{}", did, record.community);
+```
+
+The community URI an indexed channel belongs to is constructed from the **channel record's author DID** plus the channel's `community` rkey field. A bot-authored channel record can only resolve to a community on the bot's own repo; the appview will not index a bot-authored channel into a community owned by someone else's DID.
+
+Consequences:
+
+- The bot bootstraps and owns its own `social.colibri.community` record. Bridged channels cannot be inserted into a pre-existing third-party community by the bot.
+- Discovery of the bot-owned space happens by linking to the bot's community URI, not by appearing inside an existing community's sidebar.
+- The bot's community + at least one category must exist before any channel lazy-creation. Categories' `channelOrder` is a read-modify-write append per new channel.
+
+#### Inverse pattern: community owner pre-creates channels
+
+The constraint is on the channel record's author DID, not on who writes messages into the channel. So a cooperative community owner can pre-create the bridged channels on their own repo, under their own community + category, and the bot publishes messages referencing those channel rkeys. Validated against the FoC Colibri instance: six Slack channels (`present-company`, `share-your-work`, `thinking-together`, `of-ai`, `devlog-together`, `linking-together`) created by the community owner on `did:plc:j7nm3lrd5h7fm3sfhcv3lhfv` under the Feelingsof community; `trendingnotebooks.bsky.social` (with a `social.colibri.membership` for that community) published a 9-message backfill (1 top-level + 8 thread replies) into `#present-company`. Messages appeared with correct threading.
+
+In this mode the bridge only needs the slack-channel → colibri-channel-rkey mapping; it does no channel-creation, no `social.colibri.community` ownership, no `channelOrder` mutation. The trade-off is one-time manual setup by the community owner and an ongoing convention that the owner adds a Colibri channel whenever a new Slack channel should be bridged.
 
 ### Per-message avatar / displayName
 
