@@ -193,6 +193,14 @@ Edits and reactions update the same record (`putRecord`). v0.1 could split this 
 
 Slack file attachments referenced in `payload.files[]` are not blobbed in v0; their `url_private` is captured but the bytes stay on Slack. v0.1 fetches and re-uploads as atproto blobs, referencing them from the derived `social.colibri.message`.
 
+#### Why this lives under `com.feelingof.*`, not `social.colibri.*`
+
+`slackRaw` is the *FoC community's* archive of its own Slack history. Its lifetime, schema, and ownership belong to FoC — not to Colibri — and we want that boundary explicit in the lexicon namespace. Three practical consequences:
+
+- **De-risks Colibri lexicon churn.** Colibri is actively reworking its lexicons on the `feat/rework` branch (the v1 `src/utils/atproto/lexicons.ts` is deleted there; a new `apps/website/src/utils/atproto/lexicons.ts` is in flight, along with new appview spec, streaming event types, and a refactored Message component tree). If a future Colibri version renames `social.colibri.message`, splits the facet model, or changes the channel/community ownership semantics that drove the constraints in this proposal, the `slackRaw` archive is untouched. We re-run the derivation against the new lexicons and republish — no Slack re-pull, no loss.
+- **De-risks Colibri disappearing.** If Colibri is abandoned, the FoC archive is still complete, public, and addressable on atproto. A different reader (or a static-site generator off `foc-server`-style infrastructure) can render it.
+- **Avoids polluting Colibri's namespace.** Bridge-specific concepts (Slack `ts`, `slack_user_id`, `subtype`) have no business inside `social.colibri.*`. Other Slack-on-Colibri bridges (different communities, different workspaces) would invent their own `com.<community>.bridge.slackRaw` analogues; that's the right shape.
+
 ### New: `com.feelingof.bridge.slackOrigin`
 
 Provenance + dedupe authority. One-to-one with a `social.colibri.message`. `key: "any"` so we control the rkey:
@@ -349,13 +357,24 @@ Once `claimedDid` is set, future messages could be authored from the user's DID.
 
 A claimed user can republish their own messages onto their own repo at any time without granting the bridge anything. The bot's repo is a public archive — pull the `slackOrigin` records matching their `slackUserId`, republish the corresponding messages from their own DID. We ship a small CLI. No trust delegation, full data ownership.
 
+## Asks of Colibri
+
+These are upstream changes the bridge benefits from but does not block on. Until they land, `slackRaw` preserves enough state to re-derive when they do.
+
+- **Per-record author override** — optional `displayAuthor: { name, avatar? }` on `social.colibri.message` and `social.colibri.reaction`. Without it every bridged message and every aggregated reaction renders as the bot, with attribution hacked into the message text body as `@user: ` and reactions collapsed to a single "@bot reacted" entry per emoji. Single biggest UX win; unblocks proper reaction multi-reactor counts too.
+- **Collapsed / nested thread rendering** — Colibri's current UI is Discourse-flat (every reply is a top-level row referencing a `parent` rkey). Slack's threaded conversations don't survive the trip: a 30-reply thread on one Slack message becomes 30 sibling rows in the channel scroll. Inspected `feat/rework` (substantial monorepo + lexicon rewrite in flight) and the new Message component still renders flat with `parent_message` as a jump-link, not as a collapsed sub-thread. Worth raising as a v2 UX direction.
+- **Cross-repo channel ownership** — the appview hard-codes `community_uri = at://{channel_author}/social.colibri.community/{rkey}`. The bot cannot create channels in a community it does not own. Today's workaround is "community owner pre-creates channels"; cleaner is either a `communityRepo` field on `social.colibri.channel`, or a `social.colibri.delegation` record granting channel-creation to a specific DID.
+- **Quote facet feature** — Slack's `rich_text_quote` blocks render as `> `-prefixed plain text today because Colibri's facet feature set covers bold/italic/strikethrough/code/mention/link/channel but not quote.
+- **Confirm TID-on-rkey monotonicity expectations** — `social.colibri.message` uses `key: "tid"`. `bsky.social` tolerates non-monotonic TIDs on rkeys (otherwise our backfill would 409 against live messages). PDSes that *do* enforce monotonicity would break the bridge. Worth a one-line "we don't require monotonic rkeys" assurance in the lexicon docs, or a switch to `key: "any"`.
+- **Attachment shape clarity** — examples / docs for `social.colibri.message.attachments[]` would unblock our v0.1 file-attachment work.
+
 ## Open questions
 
 - Backfill from `dump-history.js` snapshot, or forward-only? All-channels backfill is significant volume.
 - Channel / category layout: single community with flat siblings, or map Slack groupings to Colibri categories? Sidecar is agnostic.
 - Private channels and DMs — out of scope. Bot joins public channels only.
-- Reactions, edits, deletes — v0 ignores in the *rendered* Colibri message but captures everything in `slackRaw`, so v0.1 can re-derive the visible message without re-pulling Slack. Edits: `putRecord` on both `slackRaw` and the message. Deletes: tombstone the message, retain the `slackRaw` for audit.
-- Slack file attachments — `payload.files[]` is preserved in `slackRaw` (including `url_private`) from v0; v0.1 fetches and re-uploads as atproto blobs.
+- Reactions, edits, deletes — v0 publishes one `social.colibri.reaction` per (target_message, emoji) on the bot's repo; multi-reactor counts are preserved losslessly in `slackRaw` and become recoverable once per-record author override lands. Edits: `putRecord` on both `slackRaw` and the message. Deletes: tombstone the message, retain the `slackRaw` for audit.
+- Slack file attachments — `payload.files[]` is preserved in `slackRaw` (including `url_private`) from v0; v0.1 fetches and re-uploads as atproto blobs. bsky.social blob size limits (~1 MB images, ~50 MB video) will force large attachments to external hosting or a more permissive PDS.
 - False DID claims. v1 unverified; v2 requires two-sided counter-claim.
 - OAuth re-auth UX (v2): frequency cap, fallback when user ignores the prompt.
 
