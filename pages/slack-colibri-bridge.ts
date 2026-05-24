@@ -137,6 +137,14 @@ function hash10(s: string): number {
   for (const c of s) h = (h * 31 + c.charCodeAt(0)) | 0;
   return Math.abs(h) & 0x3ff;
 }
+// Reaction rkey: synthesise time from the *message* ts so reactions live next to
+// their target in TID order; clockId distinguishes the emoji. With 10 bits of
+// clockId space and a small number of distinct emojis per message, collisions
+// are rare; collisions just merge two emoji into one reaction record, which
+// `slackRaw` can correct if we re-derive.
+function tidForReaction(messageTs: string, emojiName: string) {
+  return tidFromSlackTs(messageTs, hash10(`react:${emojiName}`));
+}
 function colibriChannelRkey(slackChannelId: string): string {
   const ch = channelOf.get(slackChannelId);
   if (!ch) throw new Error(`unknown slack channel ${slackChannelId}`);
@@ -380,6 +388,37 @@ function buildMessage(m: any, channelRkey: string, parentRkey?: string) {
   };
 }
 
+function emojiForReaction(name: string): string {
+  // Strip Slack ":name::skin-tone-X:" → look up base name, accept the loss of skin tone in v0.
+  const baseName = name.split("::")[0];
+  return EMOJI_MAP.get(baseName) ?? `:${name}:`;
+}
+
+// Walk a message's `reactions` array → one reaction record per emoji (per
+// message). Multiple Slack users with the same emoji collapse into one record
+// (they'd all author from the bot anyway and the appview likely dedupes by
+// (author, emoji, target)). Multi-reactor count is preserved losslessly in
+// `slackRaw`.
+function reactionsFor(m: any, targetMessageRkey: string) {
+  const out: { rkey: string; record: any; userCount: number; name: string; emoji: string }[] = [];
+  for (const r of m.reactions ?? []) {
+    if (!r?.name) continue;
+    const emoji = emojiForReaction(r.name);
+    out.push({
+      rkey: tidForReaction(m.ts, r.name),
+      name: r.name,
+      emoji,
+      userCount: (r.users ?? []).length || r.count || 1,
+      record: {
+        $type: "social.colibri.reaction",
+        emoji,
+        targetMessage: targetMessageRkey,
+      },
+    });
+  }
+  return out;
+}
+
 function legacyTextFallback(raw: string, b: FacetBuilder) {
   const decoded = raw
     .replace(/<([^>|]+)\|([^>]+)>/g, "$2")
@@ -475,7 +514,9 @@ const fmtRow = (
 ) => {
   const tags = `${built.hasBlocks ? "B" : "."}${built.facetCount.toString().padStart(2, " ")}`;
   const parentCol = parent ? `parent=${parent}` : "                  ";
-  return `  ${m.ts}  ${(m.channel_name || "?").padEnd(20)}  ${built.rkey}  ${parentCol}  ${tags}  '${built.record.text.slice(0, 70).replace(/\n/g, " ")}…'`;
+  const rxCount = (m.reactions ?? []).length;
+  const rxTag = rxCount ? `+${rxCount}r` : "    ";
+  return `  ${m.ts}  ${(m.channel_name || "?").padEnd(20)}  ${built.rkey}  ${parentCol}  ${tags} ${rxTag}  '${built.record.text.slice(0, 70).replace(/\n/g, " ")}…'`;
 };
 
 console.log("");
@@ -488,6 +529,26 @@ console.log("REPLIES:");
 for (const m of replies) {
   const parent = tidFromSlackTs(m.thread_ts!);
   console.log(fmtRow(m, buildMessage(m, channelMap[m.channel_id], parent), parent));
+}
+
+const allWithReactions: { m: any; targetRkey: string }[] = [];
+for (const m of tops)
+  if (m.reactions?.length)
+    allWithReactions.push({ m, targetRkey: tidFromSlackTs(m.ts) });
+for (const m of replies)
+  if (m.reactions?.length)
+    allWithReactions.push({ m, targetRkey: tidFromSlackTs(m.ts) });
+
+if (allWithReactions.length > 0) {
+  console.log("");
+  console.log("REACTIONS:");
+  for (const { m, targetRkey } of allWithReactions) {
+    for (const r of reactionsFor(m, targetRkey)) {
+      console.log(
+        `  ${m.ts}  target=${targetRkey}  rkey=${r.rkey}  ${r.emoji} (:${r.name}: ×${r.userCount})`,
+      );
+    }
+  }
 }
 
 if (dryRun) {
@@ -614,4 +675,20 @@ for (const m of replies) {
 }
 
 console.error("");
-console.error(`done: ${okT} top-level, ${okR} replies, ${failT + failR} failed`);
+console.error("reactions…");
+let okX = 0, failX = 0;
+for (const { m, targetRkey } of allWithReactions) {
+  for (const r of reactionsFor(m, targetRkey)) {
+    try {
+      await put("social.colibri.reaction", r.rkey, r.record);
+      okX++;
+    } catch (e) {
+      failX++;
+      console.error(`  fail ${m.ts} ${r.name}: ${e}`);
+    }
+    if (delayMs > 0) await new Promise((rs) => setTimeout(rs, delayMs));
+  }
+}
+
+console.error("");
+console.error(`done: ${okT} top-level, ${okR} replies, ${okX} reactions, ${failT + failR + failX} failed`);
