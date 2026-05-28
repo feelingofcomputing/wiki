@@ -1,5 +1,5 @@
 ---
-title: Ivan Reese
+title: Ivy Reese
 ---
 
 This is my personal page.
