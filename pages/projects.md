@@ -11,6 +11,8 @@ For smaller demos or projects that are not by people in the community, see [[dem
 
 **[Blawx](https://github.com/Lexpedite/blawx):** A block-based programming language for drafting rules and laws
 
+**[Calculang](https://calculang.dev):** Calculate like a spreadsheet without the layout of a spreadsheet
+
 **[Codeflowcanvas](https://codeflowcanvas.io):** An interactive visual programming system
 
 **[Freewheeling Apps](https://akkartik.name/freewheeling-apps):** Durable programs that are easy to download, run, modify, share
