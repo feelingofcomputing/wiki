@@ -37,7 +37,7 @@ _Eli Mellen:_ A lot of what I do isn’t big project based work, it tends to be 
 
 _Guyren Howe:_ A great deal more business logic can be expressed in First Order Logic than usually is. The relational model shows us how to make FOL inference straightforward and predictable. Therefore, we should implement much more of our apps in a relational system.
 
-_Ivan Reese:_  I have different answers for each project I'm involved with:
+_Ivy Reese:_  I have different answers for each project I'm involved with:
 * At Ink & Switch: I've never seen software that echoes the pleasing feeling of scribbling on paper — especially not software for programming.
 * Hest (editorialized by Kartik based on [Hest podcast #40](https://ivanish.ca/hest-podcast)): A programming environment that feels less solipsistic, like it has an existence independent of the programmer(s).
 * My personal website, the Hest podcast, the FoC podcast: Too often, the way we share our ideas feels like slowly letting stale air out of a balloon.

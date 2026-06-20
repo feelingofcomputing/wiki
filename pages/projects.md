@@ -55,4 +55,4 @@ This page was seeded from [Duncan Cragg's project comparison spreadsheet](https:
 
 [Daniel Garcia's page](https://github.com/pel-daniel/mind-bicycles)
 
-[Ivan Reese's page](https://github.com/ivanreese/visual-programming-codex)
+[Ivy Reese's page](https://github.com/ivanreese/visual-programming-codex)

@@ -1,6 +1,6 @@
 ---
 title: Tonedown
-contributors: Ivan Reese
+contributors: Ivy Reese
 ---
 
 Tonedown is a plain text markup language. You'll find it pleasant to read and write Tonedown, especially long-form prose like a wiki entry. The syntax should get out of your way and let you focus on the content of your writing.

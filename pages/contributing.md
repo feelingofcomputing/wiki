@@ -17,10 +17,10 @@ Each page begins with some "frontmatter" enclosed by triple dashes, followed by 
 ```
 ---
 title: Feeling of Computing (Podcast)
-contributors: Ivan Reese, Kartik Agaram
+contributors: Ivy Reese, Kartik Agaram
 ---
 
-The FoC community has [a podcast](feelingof.com/episodes) hosted by Ivan Reese, Jimmy Miller, and Lu Wilson.
+The FoC community has [a podcast](feelingof.com/episodes) hosted by Ivy Reese, Jimmy Miller, and Lu Wilson.
 ```
 
 The filename of each page is used for the URL, so keep that filename consistent with the title. For the example above, a good filename would be `future-of-coding-podcast.md`, so that the URL would be `/future-of-coding-podcast`.

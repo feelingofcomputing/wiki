@@ -1,6 +1,6 @@
 ---
 title: Collaboration in the Community
-contributors: Kartik Agaram, Ivan Reese
+contributors: Kartik Agaram, Ivy Reese
 ---
 
 Many people who join our community are steadily working away at their own "feeling of computing"-esq project, and delight in finding a place to talk about their discoveries, or their frustrations. There's a sense of camaraderie — we share this desire to do new things with (or to) our computers, whether that's breaking them apart and rebuilding them, or just scratching this one pernicious itch.

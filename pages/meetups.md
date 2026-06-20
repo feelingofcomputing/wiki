@@ -1,6 +1,6 @@
 ---
 title: Feeling of Computing meetups
-contributors: Ivan Reese, Maikel
+contributors: Ivy Reese, Maikel
 ---
 
 There are two active meetups affiliated with the Feeling of Computing community.
