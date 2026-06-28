@@ -1,6 +1,6 @@
 ---
 title: Projects inspired by spreadsheets
-contributors: Kartik Agaram
+contributors: Kartik Agaram, J. Ryan Stinnett
 ---
 
 ## Projects
@@ -57,6 +57,8 @@ contributors: Kartik Agaram
 [SocialCalc](https://github.com/DanBricklin/socialcalc) (2010)
 
 [ethercalc](https://github.com/audreyt/ethercalc)
+
+[How to recalculate a spreadsheet](https://lord.io/spreadsheets/) (2020)
 
 ## Demos
 
