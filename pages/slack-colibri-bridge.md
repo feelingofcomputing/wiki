@@ -179,6 +179,14 @@ Things observably missing from v0. Listed as facts, not commitments.
 - **[matrix-appservice-slack](https://github.com/matrix-org/matrix-appservice-slack)** — closest sibling. Same Slack-webhook → ghost-users → federated-protocol shape, targeting Matrix.
 - **Mariano's `scripts/dump-history.js` + `foc-server`** ([repo](https://github.com/marianoguerra/Feeling-of-Computing)) — the existing FoC pipeline pulls `conversations.history` + `conversations.replies` via Slack REST on a weekly cadence, writes JSON to `history/YYYY/MM/DD{,.replies}.json`, indexes into LanceDB with sentence-transformer embeddings, serves search via a Rust `axum` binary on Ubuntu under systemd behind nginx. Pull, not push; ingest-and-reindex, not bridge. The bridge's `slackRaw` lexicon is the atproto-native analog of those `history/*.json` dumps — same archival role, public over the firehose instead of `git push`. The backfill CLI consumes these JSON dumps directly.
 
+## Use it in the browser
+
+- I did the following to sucessfully use the FoC bridge
+- Go to https://colibri.social/app login with *sky handle
+- then go to:
+- https://colibri.social/app/c/did:plc:dl3d3fftr4tk3yf3xqxouus7/text/3msvih7djji3e
+- or use invite: https://colibri.social/invite/guSK9oNF2vcm5DTg
+
 ## Related
 
 - [[Projects]] — Colibri and FoC are both listed.
