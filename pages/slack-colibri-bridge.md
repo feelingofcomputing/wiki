@@ -14,7 +14,7 @@ Forward path (Slack → atproto), end-to-end:
 - **Messages** — rich text → Colibri facets (bold, italic, strikethrough, code, link, channel); 2048-char cap; fallback to plain-text + URL regex for legacy non-`blocks` messages
 - **Mentions** — `@user` resolves to a `social.colibri.richtext.facet#mention` against the user's claimed DID via the [in-source map](https://github.com/tomlarkworthy/slack-sync/blob/main/packages/worker/src/slack-to-did.ts); plain text fallback for unmapped users
 - **Threaded replies** — Slack `thread_ts` → Colibri `parent`
-- **Reactions** add + remove — deterministic per-emoji rkey on the target message
+- **Reactions** add + remove — deterministic per-emoji rkey on the target message. Written with a `targetMessage` field the current Colibri lexicon no longer has, so they are stored but not rendered; see [Known gaps](#known-gaps)
 - **Message edits** — re-derive in place, `putRecord` overwrites, `edited: true` set per the message lexicon
 - **Message deletes** — `deleteRecord` on the derived rkey
 - **File attachments** — fetch `url_private` with bot token → `com.atproto.repo.uploadBlob` → reference in `attachments[]`; 5 MB cap, oversize gets a `[file 'name' too large]` placeholder in the message text
@@ -203,7 +203,7 @@ Things observably missing from v0. Listed as facts, not commitments.
   reaction target          targetMessage: "<bare rkey>"           parent: "at://did/social.colibri.message/rkey"
   ```
 
-  Bridged messages render in the client today, so it accepts the bare forms, and a native reaction on a bridged message renders. Whether bridged *reactions* render under `targetMessage` is not checked. Any reader of these records has to accept both spellings.
+  Bridged messages render, so the bare `channel` is tolerated (the lexicon on Colibri `main` says `format: at-uri`; `parent` it says is a `record-key`, so there the bridge is the conformant one). **Bridged reactions do not render**: Colibri's lexicon requires `emoji` + `parent` (at-uri), `targetMessage` no longer exists in its source, and Tom saw no reactions on a message that has two bridged records (`…/3muc5hdq7vl22`, ❤️ from three Slack users and 😍 from one). A native reaction on a bridged message does render. Fix: the forward bridge writes `parent` as the message at-uri and rewrites the existing reaction records in place.
 - **Per-record author override on Colibri's lexicon.** Every bridged message and reaction renders as the bot. Optional `displayAuthor: { name, avatar? }` on `social.colibri.message` and `social.colibri.reaction` would be the cleanest fix; would also unblock proper reaction multi-reactor counts.
 - **Thread rendering.** Slack's threads flatten to sibling rows in Colibri because Colibri's UI is Discourse-flat — a 30-reply Slack thread becomes 30 top-level rows referencing the same `parent_message`. Colibri's `feat/rework` branch still renders flat.
 - **Cross-repo channel ownership in Colibri's appview.** The appview hard-codes `community_uri = at://{channel_author}/social.colibri.community/{rkey}`, so a single DID has to own both the community and every channel under it. The migration to a community DID is Colibri's answer; the bridge's remains "channels pre-created, bot references rkeys".
@@ -322,8 +322,7 @@ None of this is deployed by the push-to-main pipeline.
 ### Open
 
 - Whether the public Jetstream instance tolerates a reconnect every 10 s from one client. Fallback is a 30 s alarm.
-- Whether the bridge's own reactions (`targetMessage`, bare rkey) render in the client. A native reaction on a bridged message does: Tom reacted on `…/3munacbuvuz22` on 2026-09-07 and saw it, record `{emoji, parent: <at-uri>}`. The bridged 💯 on `3muwma7ojtt22` in share-your-work is a message to check. The reverse side reads both field names either way; the forward side may need to write the client's.
-- Whether the bot's membership record needs re-pointing at the migrated community.
+- Whether the bot's `social.colibri.membership` record needs re-pointing at the migrated community. Tom's own posts render with no membership record for the FoC community at all, so membership may not gate writes.
 
 ## Prior art
 
