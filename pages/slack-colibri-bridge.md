@@ -203,7 +203,7 @@ Things observably missing from v0. Listed as facts, not commitments.
   reaction target          targetMessage: "<bare rkey>"           parent: "at://did/social.colibri.message/rkey"
   ```
 
-  Bridged messages render in the client today, so it accepts the bare forms. Whether bridged *reactions* render under `targetMessage` is not checked. Any reader of these records has to accept both spellings.
+  Bridged messages render in the client today, so it accepts the bare forms, and a native reaction on a bridged message renders. Whether bridged *reactions* render under `targetMessage` is not checked. Any reader of these records has to accept both spellings.
 - **Per-record author override on Colibri's lexicon.** Every bridged message and reaction renders as the bot. Optional `displayAuthor: { name, avatar? }` on `social.colibri.message` and `social.colibri.reaction` would be the cleanest fix; would also unblock proper reaction multi-reactor counts.
 - **Thread rendering.** Slack's threads flatten to sibling rows in Colibri because Colibri's UI is Discourse-flat — a 30-reply Slack thread becomes 30 top-level rows referencing the same `parent_message`. Colibri's `feat/rework` branch still renders flat.
 - **Cross-repo channel ownership in Colibri's appview.** The appview hard-codes `community_uri = at://{channel_author}/social.colibri.community/{rkey}`, so a single DID has to own both the community and every channel under it. The migration to a community DID is Colibri's answer; the bridge's remains "channels pre-created, bot references rkeys".
@@ -322,7 +322,7 @@ None of this is deployed by the push-to-main pipeline.
 ### Open
 
 - Whether the public Jetstream instance tolerates a reconnect every 10 s from one client. Fallback is a 30 s alarm.
-- Whether a Colibri reaction on a bridged message renders in the client (the bridge's `targetMessage` field vs the client's `parent`); the reverse side reads both, the forward side may need to write the client's.
+- Whether the bridge's own reactions (`targetMessage`, bare rkey) render in the client. A native reaction on a bridged message does: Tom reacted on `…/3munacbuvuz22` on 2026-09-07 and saw it, record `{emoji, parent: <at-uri>}`. The bridged 💯 on `3muwma7ojtt22` in share-your-work is a message to check. The reverse side reads both field names either way; the forward side may need to write the client's.
 - Whether the bot's membership record needs re-pointing at the migrated community.
 
 ## Prior art
