@@ -155,6 +155,55 @@ Lossless capture of the full `event_callback` envelope, written *before* any der
 
 rkey = sanitised Slack `event_id`. Slack file attachments referenced in `payload.files[]` are captured by URL only; the bytes are re-uploaded as atproto blobs by the derived `social.colibri.message` path (see [Code → Worker](https://github.com/tomlarkworthy/slack-sync/blob/main/packages/worker/src/index.ts)).
 
+#### Live in v0: `com.feelingofcomputing.bridge.event`
+
+The tail feed. Both halves append one pointer record per change to a FoC Colibri record, so a reader follows one collection on one repo rather than polling every member's.
+
+Counted from the live repos on 2026-09-07, before the feed existed:
+
+```
+bot repo   social.colibri.message      1138
+bot repo   social.colibri.reaction      615
+native     messages, 5 member repos       44
+native     reactions, 4 member repos      18
+slackMirror rows                            8
+community members                          23
+```
+
+A reader that knows only the bot repo sees the first two rows; the other 62 records are in the authors' own repos. `com.atproto.repo.listRecords` filters by repo and collection only — `channel` is a field inside the record — so there is no per-channel listing to subscribe to, and no single repo holds both directions.
+
+```json
+{
+  "lexicon": 1,
+  "id": "com.feelingofcomputing.bridge.event",
+  "defs": {
+    "main": {
+      "type": "record",
+      "key": "tid",
+      "record": {
+        "type": "object",
+        "required": ["op", "subject", "via", "at"],
+        "properties": {
+          "op":      { "type": "string", "enum": ["create", "update", "delete"], "description": "What happened to `subject`, in Jetstream's vocabulary." },
+          "subject": { "type": "string", "format": "at-uri", "description": "The social.colibri.* record. Any repo." },
+          "cid":     { "type": "string", "description": "Record cid at the time of the event; absent for a delete." },
+          "channel": { "type": "string", "description": "FoC channel as the pre-migration rkey the bridge writes." },
+          "via":     { "type": "string", "enum": ["slack", "colibri"], "description": "Which half logged it." },
+          "at":      { "type": "string", "format": "datetime", "description": "When the bridge observed the change." }
+        }
+      }
+    }
+  }
+}
+```
+
+- **rkey is a TID minted at observation**, so `listRecords` rkey order is event order and a reader tails newest-first until it meets the last rkey it holds. Deliberately not the record's own creation time: a log is ordered by when things happened to it, and a native record's own TID was minted in someone else's repo.
+- **Pointers, never content.** The body, facets and emoji stay in the `social.colibri.*` record. Pinned by a test that asserts the written keys are exactly `$type`, `at`, `op`, `subject`, `via` plus the two optional fields.
+- **It does not replace `slackMirror`.** That map is keyed by the source rkey and rewritten in place, because Slack's `ts` cannot be chosen and the mapping must survive queue redelivery. Rewriting in place is what a log must not do: an edit leaves the rkey where it was and a delete removes it, so a newest-first tail sees neither. Both collections are kept and they answer different questions.
+- **Logged before the Slack call**, so an unmapped channel, a missing scope or a trip to the DLQ cannot drop from the feed a record that exists on atproto. The cost is the duplicate a queue retry produces, so a reader must be idempotent on `subject`; merging records by uri already is.
+- **A delete commit carries no record body**, so a native delete is logged only where a `slackMirror` row proves the record was FoC's. A record the bridge never mirrored cannot be told apart from another community's.
+- **Not backfilled.** The feed starts empty at deploy and describes changes from then on. The 1182 messages and 633 reactions already written still need one union crawl over the bot repo and the 23 member repos.
+
 ## Maintenance
 
 The bridge's per-deployment configuration lives in source, not in lexicon records. Two maps:
@@ -278,6 +327,7 @@ atproto
   collections written           social.colibri.message  social.colibri.reaction
                                 com.feelingofcomputing.bridge.slackRaw   (forward archive, rkey = event_id)
                                 com.feelingofcomputing.bridge.slackMirror (reverse index, rkey = source rkey)
+                                com.feelingofcomputing.bridge.event      (tail feed, rkey = TID at observation)
   firehose                      wss://jetstream2.us-east.bsky.network/subscribe
                                 ?wantedCollections=social.colibri.message&wantedCollections=social.colibri.reaction
 
