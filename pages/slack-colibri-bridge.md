@@ -1,11 +1,11 @@
 ---
-title: Slack → Colibri Bridge
+title: Slack ↔ Colibri Bridge
 contributors: Tom Larkworthy, Andreas S.
 ---
 
-> **Status:** v0 forward path (Slack → Colibri) live since 2026-05-31. Reverse path (Colibri → Slack) proposed 2026-09-07, not built — see [Reverse path](#reverse-path-colibri--slack-proposed). Bot identity [`@feelingofcomputing.bsky.social`](https://bsky.app/profile/feelingofcomputing.bsky.social) (`did:plc:4gcxakknd6hxtnhf33miwsob`). The community migrated on 2026-08-12 to its own identity `did:plc:dl3d3fftr4tk3yf3xqxouus7` on `colibri.social`; the bridge still writes the pre-migration channel rkeys, which Colibri resolves through `migratedFrom`. Auto-deployed on push.
+> **Status:** forward path (Slack → Colibri) live since 2026-05-31. Reverse path (Colibri → Slack) live since 2026-09-07 15:40Z — see [Reverse path](#reverse-path-colibri--slack-live). Bot identity [`@feelingofcomputing.bsky.social`](https://bsky.app/profile/feelingofcomputing.bsky.social) (`did:plc:4gcxakknd6hxtnhf33miwsob`). The community migrated on 2026-08-12 to its own identity `did:plc:dl3d3fftr4tk3yf3xqxouus7` on `colibri.social`; the bridge still writes the pre-migration channel rkeys, which Colibri resolves through `migratedFrom`. Auto-deployed on push.
 
-One-way sync from the FoC Slack workspace into the [Colibri](https://colibri.social) atproto network. Every bridged message, reaction, and attachment is a public record on the bot's bsky.social PDS; every raw Slack event is archived losslessly under a `com.feelingofcomputing.bridge.*` lexicon on the same repo. The bot authors messages into channels it does not own — the *inverse pattern* described under [Identity](#identity).
+Two-way sync between the FoC Slack workspace and the [Colibri](https://colibri.social) atproto network. Every bridged message, reaction, and attachment is a public record on the bot's bsky.social PDS; every raw Slack event is archived losslessly under a `com.feelingofcomputing.bridge.*` lexicon on the same repo. The bot authors messages into channels it does not own — the *inverse pattern* described under [Identity](#identity).
 
 ## What's live
 
@@ -20,9 +20,10 @@ Forward path (Slack → atproto), end-to-end:
 - **File attachments** — fetch `url_private` with bot token → `com.atproto.repo.uploadBlob` → reference in `attachments[]`; 5 MB cap, oversize gets a `[file 'name' too large]` placeholder in the message text
 - **Lossless raw-event archive** — every `event_callback` envelope persisted to `com.feelingofcomputing.bridge.slackRaw` *before* derivation, keyed by `event_id` (idempotent on Slack redelivery)
 
+Reverse path (atproto → Slack), end-to-end since 2026-09-07: messages, threaded replies, edits, deletes, reactions add + remove, posted as the bot with the Colibri author's name and avatar. Details under [Reverse path](#reverse-path-colibri--slack-live).
+
 Not in scope:
 
-- Reverse path (Colibri → Slack) — proposed below, not built
 - Private channels, DMs
 - Per-Slack-user authorship — every bridged record is authored by the bot; the original speaker appears as `@user:` in the message text
 - `slackRaw` backfill — historical days (pre-2026-05-31) have derived `social.colibri.message` + `social.colibri.reaction` only; the raw archive only exists for traffic the live bridge has seen
@@ -30,7 +31,8 @@ Not in scope:
 ## Code
 
 - **Repo**: [tomlarkworthy/slack-sync](https://github.com/tomlarkworthy/slack-sync) — Bun workspace monorepo
-- **Worker**: [`packages/worker/src/index.ts`](https://github.com/tomlarkworthy/slack-sync/blob/main/packages/worker/src/index.ts) — single Cloudflare Worker; producer (`fetch`) + consumer (`queue`) in one script
+- **Worker**: [`packages/worker/src/index.ts`](https://github.com/tomlarkworthy/slack-sync/blob/main/packages/worker/src/index.ts) — single Cloudflare Worker; Slack receiver (`fetch`), both queue consumers (`queue`), cron (`scheduled`). Reverse half in [`reverse.ts`](https://github.com/tomlarkworthy/slack-sync/blob/main/packages/worker/src/reverse.ts), Jetstream producer in [`tail.ts`](https://github.com/tomlarkworthy/slack-sync/blob/main/packages/worker/src/tail.ts), channel map in [`channels.ts`](https://github.com/tomlarkworthy/slack-sync/blob/main/packages/worker/src/channels.ts), mrkdwn rendering in [`mrkdwn.ts`](https://github.com/tomlarkworthy/slack-sync/blob/main/packages/worker/src/mrkdwn.ts)
+- **Tests**: `bun test packages/worker` — 30 tests on 2026-09-07, including [`test/echo.test.ts`](https://github.com/tomlarkworthy/slack-sync/blob/main/packages/worker/test/echo.test.ts), the loop guards in both directions
 - **Backfill**: [`packages/backfill/src/index.ts`](https://github.com/tomlarkworthy/slack-sync/blob/main/packages/backfill/src/index.ts) — Bun CLI for re-publishing day-files from [Mariano's archive](https://github.com/marianoguerra/Feeling-of-Computing)
 - **Slack app manifest**: [`manifest/slack-app.yaml`](https://github.com/tomlarkworthy/slack-sync/blob/main/manifest/slack-app.yaml)
 - **Deploy**: Cloudflare Workers Builds, push-to-main → auto-deploy
@@ -65,6 +67,41 @@ sequenceDiagram
 
   App->>PDS: firehose / fetch
   App-->>U: public conversation visible
+```
+
+Reverse path, live since 2026-09-07:
+
+```mermaid
+sequenceDiagram
+  autonumber
+  actor U as User in Colibri
+  participant PDS as User's PDS
+  participant J as Jetstream<br/>jetstream2.us-east
+  participant T as JetstreamTail (DO)<br/>alarm every 10 s
+  participant Q as CF Queue<br/>atproto-events
+  participant C as Consumer (queue)
+  participant S as Slack Web API
+  participant B as bsky.social PDS<br/>(bot's repo)
+
+  U->>PDS: create / update / delete<br/>social.colibri.message / .reaction
+  PDS-->>J: commit on the firehose
+  T->>J: connect at stored cursor
+  J->>T: commits + identity/account events
+  T->>T: drop did == bot, drop unmapped channels
+  T->>Q: sendBatch(wanted commits)
+  T->>J: close once an event is past drain start
+  T->>T: store cursor, re-arm alarm +10 s
+
+  C->>Q: pull batch
+  C->>B: getRecord slackMirror (dedupe / lookup)
+  alt message
+    C->>S: chat.postMessage / chat.update / chat.delete<br/>username + icon_url = author, metadata colibri_mirror
+  else reaction
+    C->>S: reactions.add / reactions.remove
+  end
+  C->>B: putRecord slackMirror (rkey = source rkey)
+  C->>Q: ack (or retry → atproto-events-dlq)
+  S-->>U: post visible in Slack (4–5 s typical)
 ```
 
 Notes on the live shape vs. the proposal that preceded it:
@@ -122,7 +159,7 @@ rkey = sanitised Slack `event_id`. Slack file attachments referenced in `payload
 
 The bridge's per-deployment configuration lives in source, not in lexicon records. Two maps:
 
-- **Slack channel → Colibri channel rkey** — `packages/worker/src/index.ts` (constant `CHANNEL_MAP`) for the live worker, and `tools/slack-to-colibri-channel.json` for the backfill CLI. The two must agree.
+- **Slack channel → Colibri channel rkey** — [`packages/worker/src/channels.ts`](https://github.com/tomlarkworthy/slack-sync/blob/main/packages/worker/src/channels.ts) (`CHANNELS`, both rkeys per channel, shared by both directions since `a5e808d`) for the live worker, and `tools/slack-to-colibri-channel.json` for the backfill CLI. The two must agree.
 - **Slack user id → claimed atproto DID** — [`packages/worker/src/slack-to-did.ts`](https://github.com/tomlarkworthy/slack-sync/blob/main/packages/worker/src/slack-to-did.ts) for the live worker, `tools/slack-to-did.json` for the backfill. The two must agree.
 
 Since the 2026-08-12 migration every channel has two rkeys. `CHANNEL_MAP` still holds the pre-migration ones; the migrated channel records carry `migratedFrom` pointing back at them. Read from `did:plc:dl3d3fftr4tk3yf3xqxouus7` on 2026-09-07:
@@ -143,7 +180,7 @@ CC2JRGVLK     introduce-yourself  3mn5tkvfo2j2s            3msvih7djjfxt
 CCL5VVBAN     share-your-work     3mn5tmbyexz27            3msvih7djjbh2
 ```
 
-To add a new bridged channel: create the `social.colibri.channel` record on the community identity, hand the rkey to the bridge maintainer, who edits both files, commits, and pushes — Cloudflare Workers Builds redeploys the worker automatically on push. A channel created after the migration has only a migrated-style rkey; whether the bot may reference it as a bare rkey or must use the at-uri form is untested.
+To add a new bridged channel: create the `social.colibri.channel` record on the community identity, hand the rkey to the bridge maintainer, who edits both files, commits, and pushes — Cloudflare Workers Builds redeploys the worker automatically on push. Also `/invite @focbridge` in the Slack channel: the bot has to be a member both to receive its events and to post into it. A channel created after the migration has only a migrated-style rkey; whether the bot may reference it as a bare rkey or must use the at-uri form is untested.
 
 To map a new user to their DID: get their bsky handle, resolve to a DID with `com.atproto.identity.resolveHandle`, add the entry to both files, commit, push.
 
@@ -210,47 +247,105 @@ Things observably missing from v0. Listed as facts, not commitments.
 - **Quote facet.** Slack `rich_text_quote` blocks render as `> `-prefixed plain text because Colibri's facet feature set has no quote.
 - **TID-on-rkey monotonicity assurance from Colibri.** `social.colibri.message` uses `key: "tid"`. bsky.social tolerates non-monotonic TIDs (without which backfill of old Slack history would 409 against live messages). A PDS that strictly enforced monotonicity would break the bridge; a one-line assurance in the lexicon docs or a switch to `key: "any"` would lock this in.
 
-## Reverse path (Colibri → Slack), proposed
+## Reverse path (Colibri → Slack), live
 
-Proposed 2026-09-07. Nothing is built. Design record with the probes behind each claim: `plan/colibri-to-slack-bridge.md` in [lopecode-dev](https://github.com/tomlarkworthy/lopecode-dev).
+Built 2026-09-07 in four slack-sync commits: [`a5e808d`](https://github.com/tomlarkworthy/slack-sync/commit/a5e808d) consumer, hand-fed; [`aadfe9c`](https://github.com/tomlarkworthy/slack-sync/commit/aadfe9c) Jetstream tail; [`03298eb`](https://github.com/tomlarkworthy/slack-sync/commit/03298eb) byline dropped in favour of the author as poster; [`18152fb`](https://github.com/tomlarkworthy/slack-sync/commit/18152fb) Slack replies/reactions on a mirrored post target the Colibri original. Design record with the probes behind each decision: `plan/colibri-to-slack-bridge.md` in [lopecode-dev](https://github.com/tomlarkworthy/lopecode-dev).
 
-**Why now.** Until 2026-09-07 every message in the FoC channels was bridge-authored. The first native posts (a message, a reply to a bridged message, a reaction) are invisible in Slack. A reverse path mirrors them under the bot's Slack identity with an `@name: ` byline, the same convention the forward path uses in Colibri.
+**Why.** Until 2026-09-07 every message in the FoC channels was bridge-authored. The first native posts (a message, a reply to a bridged message, a reaction) were invisible in Slack.
+
+### Identifiers
+
+Everything a maintainer needs to find the pieces. Read from the live systems on 2026-09-07.
+
+```
+Slack
+  workspace (team_id)           T5TCAFTA9
+  app "FoC Bridge"              A0B6U3WE1RD        https://api.slack.com/apps/A0B6U3WE1RD
+  bot user                      U0B7685PHGD        the forward guard keys on this
+  bot scopes                    channels:history channels:read groups:history groups:read
+                                users:read users:read.email emoji:read files:read reactions:read
+                                chat:write chat:write.customize reactions:write   (added 2026-09-07)
+  event subscriptions           message.channels message.groups reaction_added reaction_removed  (unchanged)
+  post metadata                 event_type "colibri_mirror", event_payload {uri, cid}
+  channels                      the 11 ids in the Maintenance table
+
+atproto
+  bot                           did:plc:4gcxakknd6hxtnhf33miwsob   @feelingofcomputing.bsky.social
+  bot PDS                       https://jellybaby.us-east.host.bsky.network  (entryway https://bsky.social)
+  community (since 2026-08-12)  did:plc:dl3d3fftr4tk3yf3xqxouus7   c-3msvih5zj4kuk.colibri.social, PDS colibri.social
+  pre-migration owner           did:plc:j7nm3lrd5h7fm3sfhcv3lhfv   Tom
+  appview                       did:web:api.colibri.social
+  collections written           social.colibri.message  social.colibri.reaction
+                                com.feelingofcomputing.bridge.slackRaw   (forward archive, rkey = event_id)
+                                com.feelingofcomputing.bridge.slackMirror (reverse index, rkey = source rkey)
+  firehose                      wss://jetstream2.us-east.bsky.network/subscribe
+                                ?wantedCollections=social.colibri.message&wantedCollections=social.colibri.reaction
+
+Cloudflare (account subdomain endpointservices)
+  worker                        slack-sync-bridge   https://slack-sync-bridge.endpointservices.workers.dev
+  queues                        slack-events / slack-events-dlq        (forward)
+                                atproto-events / atproto-events-dlq    (reverse)
+  durable object                class JetstreamTail, one instance named "tail" (migration tag v1, sqlite)
+  cron                          */1 * * * *   re-arms the tail's alarm if lost
+  secrets                       SLACK_SIGNING_SECRET SLACK_BOT_TOKEN BSKY_HANDLE BSKY_APP_PASSWORD INJECT_TOKEN
+  routes                        POST /slack/events   GET /health
+                                POST /atproto/inject          bearer INJECT_TOKEN, hand-feed one commit
+                                GET /tail/status  POST /tail/start  POST /tail/stop   bearer INJECT_TOKEN
+  deploy                        Workers Builds on push to main of tomlarkworthy/slack-sync
+```
 
 ### Loop safety
 
-Two writers, one per direction, and each direction ignores the other writer's account. That is the whole mechanism; no message metadata is load-bearing.
+Two writers, one per direction, and each direction drops the other writer's account before touching a network. Pinned by `test/echo.test.ts` (30 tests pass, 2026-09-07).
 
 ```
-path                                            guard                                  state
-Slack human msg  → bot Colibri record           reverse skips did == bot DID           to build
-Colibri human msg → bot Slack post              forward skips user == bot Slack id     exists, messages only
-Slack human reaction → bot Colibri reaction     reverse skips did == bot DID           to build
-Colibri human reaction → bot Slack reaction     forward skips user == bot Slack id     MISSING in publishReaction
-bot chat.update → message_changed               forward skips message.user == bot      exists
-bot chat.delete → message_deleted               forward skips previous_message.user    MISSING in unpublishMessage
-bot reactions.remove → reaction_removed         forward skips user == bot Slack id     MISSING in unpublishReaction
+path                                            guard                                             where
+Slack human msg  → bot Colibri record           tail and consumer skip did == bot DID             tail.ts wantEvent, reverse.ts handleAtprotoEvent
+Colibri human msg → bot Slack post              forward skips user == U0B7685PHGD, or bot_id,     index.ts isSelfSlackEvent
+                                                or subtype bot_message, or metadata colibri_mirror
+Slack human reaction → bot Colibri reaction     same as row 1
+Colibri human reaction → bot Slack reaction     forward skips reaction user == bot                index.ts isSelfSlackEvent
+bot chat.update → message_changed               judged on the nested message                      same
+bot chat.delete → message_deleted               judged on previous_message                        same
+bot reactions.remove → reaction_removed         user == bot                                       same
 ```
 
-The three missing guards are harmless today because the bot has no Slack write scopes. The reaction one would produce a visible duplicate the moment it does: each reaction the bot mirrors into Slack would come back as a second reaction record from the bot repo. Fixing them is step one, shipped alone, before any scope change.
+Checked live, not only in tests: after the first mirrored post (Slack ts `1788794724.510389`) the bot repo had no `social.colibri.message` at `tidFromSlackTs` of that ts, and no bot reaction records at the rkeys the two mirrored reactions would have produced. Human replies and reactions on a bot post are not self events and still flow, see *Threads and reactions*.
 
 ### Source of events
 
-Jetstream (`wss://jetstream2.us-east.bsky.network/subscribe?wantedCollections=social.colibri.message&wantedCollections=social.colibri.reaction`) delivers Colibri commits from every author; Tom's native message was on it 684 ms after its `createdAt`. Three facts from the probes shape the consumer:
+Jetstream filters by collection, not community, so every Colibri room on the network arrives and the channel match drops the rest. `identity` and `account` events keep flowing regardless of the filter, which gives a consumer a clock: an event whose `time_us` is past the moment the drain started means it is caught up.
 
-- Filtering is by collection, not community. Every Colibri room on the network arrives; the channel match drops the rest before anything is queued. Network-wide volume was 9 commits across a day of probing.
-- A `cursor` replays from any point at roughly a minute of firehose per second, and `identity`/`account` events keep arriving regardless of the filter, so a consumer knows it has caught up by comparing an event's `time_us` with its own start time. The socket does not need to stay open.
-- No FoC-specific filter exists server-side; `wantedDids` would need a member list and would remove the clock.
+The producer is a Durable Object (`JetstreamTail`) with an alarm every 10 s. Each alarm opens the socket at the stored cursor, forwards the wanted commits in batches, closes once caught up or after 8 s, stores the last `time_us`, re-arms. Started 2026-09-07 15:40:03Z; the first 50 s of `/tail/status`:
 
-Producer: a Cloudflare Durable Object whose alarm fires every 10 s, connects with the stored cursor, forwards matching commits to a queue, stores the last `time_us`, closes once caught up. Expected median latency ~5 s, the forward path's p50. Fits inside the Workers Paid plan the forward bridge already needs for its queue; the only variant that could bill is holding the socket open around the clock, which is a one-line change if a sub-second tail is ever wanted.
+```
+15:40:15Z  drains 2  lastDrainMs  334  seen  7  caughtUp true
+15:40:27Z  drains 3  lastDrainMs 1425  seen 10  caughtUp true
+15:40:40Z  drains 4  lastDrainMs 3265  seen  8  caughtUp true
+15:40:52Z  drains 5  lastDrainMs 1066  seen  5  caughtUp true
+```
+
+Replay check before starting it: the same filter run from a cursor at 13:04Z (`scripts/tail-smoke.ts`) caught up in 76 s over 6544 events and passed exactly the four native records that had been injected by hand that afternoon, nothing from the bot repo.
+
+Latency, record TID to `postedAt` on the mirror record, the four tail-driven posts of 2026-09-07:
+
+```
+3muwtvj3e2cww  15:42:24.7 -> 15:42:29.1   4.4 s
+3muwuehgrwsqe  15:50:46.3 -> 15:51:03.5  17.1 s   (worker redeploying, 03298eb)
+3muwunr2lns66  15:55:58.4 -> 15:56:03.2   4.8 s
+3muwutt35icww  15:59:21.8 -> 15:59:27.0   5.2 s
+```
+
+Rejected alternatives: a persistent socket (same latency minus the alarm wait, but ~82% of the Durable Object duration allowance versus ~16% for the alarm drain, priced 2026-09-07); the existing contrail cron indexer (~30 s median, kept for the viewer instead). The alarm drain is one line from a persistent socket if a sub-second tail is ever wanted.
 
 ### Consumer
 
-Per event, in order:
+Per commit, in order (`reverse.ts`):
 
-1. `did == bot DID` → skip.
-2. Resolve `channel` through the map, accepting bare pre-migration rkey, pre-migration at-uri and migrated at-uri. Unmapped → skip.
-3. Dedupe against a `com.feelingofcomputing.bridge.slackMirror` record on the bot repo, rkey = the Colibri message rkey. Present on a `create` → already posted. Slack's `ts` cannot be chosen, so the mapping is stored rather than derived; this is the reverse of the forward path's deterministic rkeys and is what makes queue redelivery and cursor replay safe.
-4. Render, `chat.postMessage`, then `putRecord` the mirror.
+1. `did == bot DID` → skip. Collection not message/reaction → skip.
+2. Message: resolve `channel` through `channelForRef`, which accepts the bare pre-migration rkey, the pre-migration at-uri and the migrated at-uri. Unmapped → skip.
+3. Dedupe against `com.feelingofcomputing.bridge.slackMirror` on the bot repo, rkey = the source record's rkey. Same `sourceCid` → already posted. Slack's `ts` cannot be chosen, so the mapping is stored rather than derived; this is what makes queue redelivery and cursor replay safe.
+4. Render, post, then `putRecord` the mirror.
 
 ```json
 {
@@ -264,10 +359,12 @@ Per event, in order:
         "type": "object",
         "required": ["source", "slackChannelId", "slackTs", "postedAt"],
         "properties": {
-          "source":         { "type": "string", "format": "at-uri", "description": "The native social.colibri.message this Slack post mirrors." },
+          "source":         { "type": "string", "format": "at-uri", "description": "The native record this Slack post or reaction mirrors." },
           "sourceCid":      { "type": "string" },
           "slackChannelId": { "type": "string" },
           "slackTs":        { "type": "string" },
+          "slackThreadTs":  { "type": "string", "description": "Messages: the Slack thread root (own ts when top-level)." },
+          "emojiName":      { "type": "string", "description": "Reactions: the Slack short name that was added." },
           "postedAt":       { "type": "string", "format": "datetime" }
         }
       }
@@ -276,53 +373,51 @@ Per event, in order:
 }
 ```
 
-Edits (`update` commits) → `chat.update` on the mirror's `slackTs`. Deletes → `chat.delete`, then delete the mirror. Reactions → `reactions.add` / `reactions.remove`.
+`update` commits → `chat.update` on the mirror's `slackTs`. `delete` → `chat.delete`, then delete the mirror. Reactions → `reactions.add` / `reactions.remove` with the Slack short name (the forward path's name→unicode table inverted; a custom `:name:` passes through); `already_reacted`, `no_reaction`, `message_not_found` are tolerated.
 
-**Rendering**, symmetric to the forward path: `@Name: ` + body. Name from the author's Bluesky profile, falling back to the handle in the DID document (colibri.social accounts may have no Bluesky profile). Mention facets whose DID is in the Slack-user map render as `<@U…>`; links as `<url|text>`; bold, italic, strikethrough, code as mrkdwn; `&`, `<`, `>` escaped. Attachments as `com.atproto.sync.getBlob` links on the author's PDS for v0. With `chat:write.customize` the post can also carry the author's name and avatar as the poster; the text byline stays because it is what survives into search, notifications and the archive.
+**Rendering.** The post carries the author as `username` and `icon_url` (`chat:write.customize`), name from the Bluesky profile, falling back to the handle in the DID document. The text is the body alone; the `@name: ` byline is prepended only if the customize scope is missing (`missing_scope` fallback). Mention facets whose DID is in the Slack-user map render as `<@U…>`; links as `<url|text>`; bold, italic, strikethrough, code as mrkdwn; `&`, `<`, `>` escaped. Attachments as `com.atproto.sync.getBlob` links on the author's PDS; `unfurl_links` and `unfurl_media` off.
 
 ### Threads and reactions
 
-A reply or reaction has to cross the identity mapping in whichever direction it travels:
+A reply or reaction crosses the identity mapping in whichever direction it travels:
 
 ```
 direction   target author    how the other side's id is found
-S → C       Slack human      tidFromSlackTs(ts)                                       (existing)
-S → C       bot post         parent_user_id / item_user == bot → read the post's Slack metadata (1 API call)
-C → S       bridged message  tid >> 10 → Slack ts; channel from the record            (no state; verified on Tom's reply)
-C → S       native message   slackMirror lookup by rkey → slackTs
+S → C       Slack human      tidFromSlackTs(ts)                                              unchanged
+S → C       bot post         parent_user_id / item_user == bot → conversations.replies with   18152fb
+                             include_all_metadata → colibri_mirror uri → parent = that at-uri
+C → S       bridged message  tid >> 10 → Slack ts; channel from the record; its own `parent`  verified 15:25Z on Tom's reply
+                             is the Slack root (one hop)
+C → S       native message   slackMirror lookup by rkey → slackTs / slackThreadTs
 ```
 
-The second row is a forward-side change: today a Slack reply under a mirrored Colibri message would compute a `parent` that names nothing in Colibri. Colibri threads nest (a native reply points at its direct parent, which may itself be a reply) while Slack has one level under a root `thread_ts`, so the reverse side walks `parent` until it reaches a message with no parent or a bridged one, whose own `parent` is already the Slack root.
+Colibri threads nest (a native reply points at its direct parent, which may itself be a reply) while Slack has one level under a root `thread_ts`, so the reverse side walks `parent` until it reaches a bridged message or a mirrored one. Tom's reply `3muwlasrtbcww` took two hops to land in thread `1788084452.267889`.
 
-### Slack knowledge the reverse path needs
+The second row was the last gap: a 🎉 added in Slack to the first mirrored post before `18152fb` produced reaction record `3muwsx44upptv` whose `parent` names a bot-repo message that does not exist. Removing and re-adding the reaction rewrites it under the new code.
 
-Facts about Slack that the design depends on, with where they came from.
+### Slack knowledge the reverse path depends on
 
-- **Scopes.** The app manifest declares no write scopes today. Needed: `chat:write` (post, update, delete own messages), `chat:write.customize` (per-post `username` / `icon_url`), `reactions:write`. `files:write` only if attachments are re-uploaded rather than linked. A scope change is not live until the app is reinstalled to the workspace; reinstalling usually keeps the same bot token, but check it against the worker's secret afterwards.
-- **The bot must be a member of a channel to post in it**, the same membership the forward path already needs to receive `message.channels` events. Nothing new for the 11 mapped channels; a new channel needs `/invite @focbridge`.
-- **The bot's own posts come back as events** through the existing `message.channels` subscription. The forward path filters them by the bot's Slack user id (`U0B7685PHGD`). The exact fields a bot post carries (`user`, `bot_id`, `bot_profile`) will be visible in `slackRaw` after the first hand post; the guard should match either `user` or `bot_id`.
-- **Events name the target's author.** Thread replies carry `parent_user_id`; `reaction_added` / `reaction_removed` carry `item_user`. Verified in the live `slackRaw` archive. That is how the forward side tells a reply-to-bot from a reply-to-human with no API call.
-- **Message metadata.** `chat.postMessage` accepts `metadata: { event_type, event_payload }`, invisible in the UI, returned by `conversations.replies` / `conversations.history` with `include_all_metadata=true`. The reverse side stamps `{ event_type: "colibri_mirror", event_payload: { uri, cid } }` on every post; the forward side reads it to find the Colibri original of a bot post.
-- **Rate limits** ([docs.slack.dev](https://docs.slack.dev/apis/web-api/rate-limits), read 2026-09-07): "apps may post no more than one message per second per channel", with short bursts tolerated; `reactions.add`, `chat.update`, `chat.delete`, `conversations.replies` are Tier 3, "50+ per minute". Colibri traffic is far below either; queue retries cover a 429.
-- **Text.** Slack recommends "limit messages sent to channels to 4000 characters"; Colibri messages are capped at 2048 by the forward path and by the client, so no truncation on the way back. Slack mrkdwn is not Markdown: `*bold*`, `_italic_`, `~strike~`, `` `code` ``, `> quote`, links as `<url|text>`, and `&`, `<`, `>` must be entity-escaped or they are parsed as control sequences.
-- **Reactions take short names, not characters.** `reactions.add` wants `name=heart`, never `❤️`; the forward path's name→unicode table is inverted for this. A custom `:name:` passes through.
-- **A bot cannot post as a person.** Without a user token everything the reverse path writes appears as the app, with an APP badge, however `username` is customised. That is the point: it is what the forward guard keys on.
-- **Edit and delete apply only to the bot's own messages** with a bot token, which is all the reverse path ever touches.
+- **Scopes.** `chat:write` (post, update, delete own messages), `chat:write.customize` (per-post `username` / `icon_url`), `reactions:write`. A scope change is not live until the app is reinstalled; the first live inject on 2026-09-07 failed with `missing_scope` for exactly that reason and retried into `atproto-events-dlq`. Reinstalling kept the same bot token.
+- **The bot must be a member of a channel to post in it**, the same membership the forward path needs to receive `message.channels` events.
+- **The bot's own posts come back as events** through the existing subscription, with `user` = the bot user id, and `metadata` intact. A `chat.update` comes back as `message_changed` with the nested `message`, a `chat.delete` as `message_deleted` with `previous_message`.
+- **Events name the target's author.** Thread replies carry `parent_user_id`; `reaction_added` / `reaction_removed` carry `item_user`. The forward side gates its one `conversations.replies` call on them.
+- **Message metadata** (`metadata: { event_type, event_payload }`) is invisible in the UI and returned by `conversations.replies` with `include_all_metadata=true`.
+- **Rate limits** ([docs.slack.dev](https://docs.slack.dev/apis/web-api/rate-limits), read 2026-09-07): one message per second per channel; `reactions.add`, `chat.update`, `chat.delete`, `conversations.replies` Tier 3, 50+ per minute. A 429 throws and the queue retries.
+- **Text.** Slack recommends 4000 characters; Colibri messages are capped at 2048. mrkdwn is not Markdown: `*bold*`, `_italic_`, `~strike~`, `` `code` ``, links as `<url|text>`, and `&`, `<`, `>` must be entity-escaped.
+- **Reactions take short names, not characters.** `reactions.add` wants `name=heart`, never `❤️`.
+- **A bot cannot post as a person.** Everything the reverse path writes appears as the app with an APP badge, however `username` is customised. That is what the forward guard keys on.
 
-### Steps for a workspace admin
+### Operating it
 
-None of this is deployed by the push-to-main pipeline.
-
-1. api.slack.com/apps → FoC Bridge → App Manifest: add `chat:write`, `chat:write.customize`, `reactions:write` under `oauth_config.scopes.bot`; save. Mirror into `manifest/slack-app.yaml` and drop its "No write scopes" comment.
-2. Install App → Reinstall to Workspace, approve the scopes.
-3. Compare the Bot User OAuth Token with the one the worker holds; if it changed, `wrangler secret put SLACK_BOT_TOKEN` from `packages/worker`.
-4. Post once by hand into `#test-01` with the token and a `metadata` block. The `slackRaw` record for it is the fixture for the self-guard. With today's code it also produces one bot Colibri message; delete that record by hand.
-5. Event subscriptions: no change.
+- `GET /tail/status` (bearer `INJECT_TOKEN`) returns `enabled`, `cursorUs`, last drain time/duration/size, `lastCaughtUp`, `lastError`, next `alarmAt`. `drains` climbing by 6 a minute with `lastCaughtUp: true` is healthy.
+- `POST /tail/stop` disconnects the reverse path without a deploy; `POST /tail/start` resumes from the stored cursor, so nothing posted in between is lost (Jetstream replays; the mirror records dedupe).
+- A poisoned event ends in `atproto-events-dlq` after 5 retries. Purge from the dashboard (Queues → the DLQ → Settings) or `npx wrangler@4 queues purge atproto-events-dlq`; the repo pins wrangler 3, which has no `purge`.
+- `bun scripts/inject.ts at://did/collection/rkey` feeds one record by hand; `bun scripts/tail-smoke.ts [cursor_us] [budget_ms]` runs one drain locally with the production filter.
 
 ### Open
 
-- Whether the public Jetstream instance tolerates a reconnect every 10 s from one client. Fallback is a 30 s alarm.
-- Whether the bot's `social.colibri.membership` record needs re-pointing at the migrated community. Tom's own posts render with no membership record for the FoC community at all, so membership may not gate writes.
+- The bot's `social.colibri.membership` record still points at the pre-migration community. Tom's own posts render with no membership record for the FoC community, so membership may not gate writes.
+- Reactions and deletes are forwarded network-wide (they carry no channel), each costing one queue op and one `getRecord` on the bot repo before being dropped as unmapped. Colibri-wide volume was 9 commits in a day of probing, so this was left as is.
 
 ## Prior art
 
