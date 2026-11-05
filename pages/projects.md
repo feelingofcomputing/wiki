@@ -37,6 +37,8 @@ For smaller demos or projects that are not by people in the community, see [[dem
 
 **[Tom's Visual Probabilistic Programming Language](http://alltom.com/pages/ppl-lab-notebook)**
 
+**[We CAN Have Nice Things / Project WitchChant](https://wchnt.com/): Experimental *assemblage programming language* that turns OO inside out for greater readability.
+
 ## Less active projects/creators
 
 **[Ceptre](https://github.com/chrisamaphone/interactive-lp):** A programming language for interactively prototyping rule systems like game mechanics
